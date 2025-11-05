@@ -1,43 +1,47 @@
-import tempfile
-import speech_recognition as sr
+# speech_to_text.py
+from io import BytesIO
+from typing import Optional, Any, Dict
 from pydub import AudioSegment
+import speech_recognition as sr
 
-def process_audio_file(file_path):
-    """Nhận diện giọng nói từ file âm thanh (đường dẫn cụ thể)."""
-    recognizer = sr.Recognizer()
-    try:
-        with sr.AudioFile(file_path) as source:
-            audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data, language="vi-VN")
-        return {"success": True, "text": text}
-    except sr.UnknownValueError:
-        return {"success": False, "message": "❌ Không thể nhận diện giọng nói trong file."}
-    except Exception as e:
-        return {"success": False, "message": f"Lỗi xử lý file âm thanh: {e}"}
+# Nếu bạn có config.py set tesseract/ffmpeg path thì không cần dùng ở đây.
+# Chỉ cần chắc chắn ffmpeg đã ở PATH để pydub đọc định dạng.
 
+def _to_wav_bytes(data: bytes) -> bytes:
+    seg = AudioSegment.from_file(BytesIO(data))  # auto-detect
+    buf = BytesIO()
+    seg.export(buf, format="wav")  # normalize to WAV
+    return buf.getvalue()
 
-def speech_to_text(audio_bytes=None, uploaded_file=None):
-    """
-    Nếu có audio_bytes → xử lý ghi âm từ mic.
-    Nếu có uploaded_file → xử lý file tải lên.
-    """
+def _lang_to_bcp47(lang_ui: str) -> str:
+    return "en-US" if lang_ui.strip().lower().startswith("english") else "vi-VN"
+
+def speech_to_text(
+    audio_bytes: Optional[bytes] = None,
+    uploaded_file: Optional[Any] = None,
+    lang: str = "Tiếng Việt"
+) -> Dict[str, Any]:
     try:
         if audio_bytes:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                tmp.write(audio_bytes)
-                tmp_path = tmp.name
-            return process_audio_file(tmp_path)
-
-        elif uploaded_file:
-            temp_audio_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-            # Dùng pydub để chuyển đổi sang wav
-            audio = AudioSegment.from_file(uploaded_file)
-            audio.export(temp_audio_path, format="wav")
-            return process_audio_file(temp_audio_path)
-
+            wav_bytes = _to_wav_bytes(audio_bytes)
+        elif uploaded_file is not None:
+            file_bytes = uploaded_file.read()
+            if not file_bytes:
+                return {"success": False, "message": "File rỗng hoặc không đọc được."}
+            wav_bytes = _to_wav_bytes(file_bytes)
         else:
-            return {"success": False, "message": "❗ Không có dữ liệu âm thanh."}
+            return {"success": False, "message": "Chưa có nguồn âm thanh."}
 
+        recog_lang = _lang_to_bcp47(lang)
+        r = sr.Recognizer()
+        with sr.AudioFile(BytesIO(wav_bytes)) as source:
+            audio_data = r.record(source)
+        text = r.recognize_google(audio_data, language=recog_lang)
+        return {"success": True, "text": text}
+
+    except sr.UnknownValueError:
+        return {"success": False, "message": "Không hiểu được âm thanh (UnknownValueError)."}
+    except sr.RequestError as e:
+        return {"success": False, "message": f"Lỗi kết nối Speech API: {e}"}
     except Exception as e:
-        return {"success": False, "message": f"Lỗi xử lý: {e}"}
-
+        return {"success": False, "message": f"Lỗi: {e}"}
