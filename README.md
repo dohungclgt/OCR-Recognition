@@ -116,7 +116,7 @@ streamlit run app.py
 ```
 - Ứng dụng sẽ tự động mở trình duyệt localhost
 
-###⚠️ Lưu ý:
+### ⚠️ Lưu ý:
 - Các module Scan và Speech hiện đang trong giai đoạn phát triển. (còn 1 số lỗi chưa sửa được)
 - Nếu gặp lỗi khi chạy phần speech, hãy đảm bảo:
 - ffmpeg đã được cài và thêm vào PATH.
