@@ -50,7 +50,7 @@
 ## 🧰 **Cách cài đặt và chạy**
  bass
 ### 1️⃣ Clone project từ GitHub
-- git clone https://github.com/dohungclgt/ocr_app.git
+- git clone https://github.com/dohungclgt/OCR-recognizition
 - cd ocr_app
 ### 2️⃣ Tạo môi trường ảo
 - python -m venv venv
