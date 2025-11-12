@@ -1,4 +1,4 @@
-# app.py — Universal OCR App (Tesseract + Google AI Studio / Gemini)
+# app.py — Universal OCR App (final polished version with 2-column layout)
 from io import BytesIO
 import os
 import io
@@ -17,7 +17,7 @@ from speech_to_text import speech_to_text
 from smart_ai_extract import analyze_document_ai
 
 # ====== GOOGLE GENAI SDK ======
-os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "your key here")
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "AIzaSyASIDdnathRVBROZpbKMmreESjj_HzPR0E")
 
 try:
     from google import genai
@@ -29,18 +29,7 @@ except Exception:
     _gem_client = None
 
 # ====== GEMINI HELPER ======
-def _ensure_rgb_jpeg_bytes(file_bytes: bytes, max_side: int = 2400, jpeg_quality: int = 90) -> bytes:
-    img = Image.open(BytesIO(file_bytes)).convert("RGB")
-    w, h = img.size
-    scale = min(1.0, max_side / max(w, h))
-    if scale < 1.0:
-        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-    out = BytesIO()
-    img.save(out, format="JPEG", quality=jpeg_quality, optimize=True)
-    return out.getvalue()
-
 def _extract_text_from_resp(resp) -> str:
-    """Trích text an toàn từ phản hồi Gemini"""
     try:
         if getattr(resp, "text", None):
             return resp.text.strip()
@@ -67,222 +56,244 @@ lang = st.sidebar.radio("🌐 Language / Ngôn ngữ", ["English", "Tiếng Vi�
 engine = st.sidebar.radio("🧠 OCR Engine", ["Tesseract (Local)", "Google AI Studio (Gemini)"], index=1)
 gem_model = st.sidebar.selectbox("🤖 Gemini Model", ["gemini-2.5-flash", "gemini-2.5-pro"], index=0)
 
-if st.sidebar.button("🔍 Test Gemini API"):
-    if not _gemini_available:
-        st.sidebar.error("❌ Chưa cài Google GenAI SDK hoặc chưa có GEMINI_API_KEY.")
-    else:
-        try:
-            ping = _gem_client.models.generate_content(model=gem_model, contents="Return READY")
-            st.sidebar.success("✅ Gemini hoạt động: " + (_extract_text_from_resp(ping) or "OK"))
-        except Exception as e:
-            st.sidebar.error(f"Lỗi Gemini: {e}")
-
 modes = ["📸 Image", "📄 PDF", "📷 Scan", "🎤 Speech"] if lang == "English" else ["📸 Ảnh", "📄 PDF", "📷 Scan", "🎤 Giọng nói"]
 mode = st.sidebar.radio("🧩 " + ("Select Mode" if lang == "English" else "Chọn chế độ"), modes)
 
-# ====== HIỂN THỊ KẾT QUẢ ======
-def show_result_box(text: str, height: int = 350, filename: str = "ocr_result.txt"):
-    st.success("✅ " + ("Result:" if lang == "English" else "Kết quả:"))
-    st.text_area("Output", text, height=height)
-    st.download_button("💾 " + ("Download text" if lang == "English" else "Tải kết quả"), text, file_name=filename)
+# ====== Sidebar Descriptions ======
+if "📸" in mode:
+    st.sidebar.info("📸 " + ("Upload an image to extract or analyze text." if lang == "English" else "Tải lên ảnh để nhận diện hoặc phân tích văn bản."))
+elif "📄" in mode:
+    st.sidebar.info("📄 " + ("Upload a PDF file for OCR or AI extraction." if lang == "English" else "Tải lên file PDF để nhận diện hoặc phân tích."))
+elif "📷" in mode:
+    st.sidebar.info("📷 " + ("Use your camera to scan and extract text." if lang == "English" else "Dùng webcam để quét và nhận diện chữ."))
+elif "🎤" in mode:
+    st.sidebar.info("🎤 " + ("Record or upload audio to transcribe speech." if lang == "English" else "Ghi âm hoặc tải lên file giọng nói để nhận diện."))
 
-# ============================================================
-# 📸 IMAGE MODE
-# ============================================================
+# ====== IMAGE MODE ======
 if mode in ["📸 Image", "📸 Ảnh"]:
     uploaded_file = st.file_uploader("📤 " + ("Upload image" if lang == "English" else "Tải lên ảnh"),
                                      type=["png", "jpg", "jpeg"])
+
     if uploaded_file:
         img_bytes = uploaded_file.read()
-        st.image(img_bytes, caption="🖼️ " + ("Uploaded Image" if lang == "English" else "Ảnh đã tải lên"),
-                 use_container_width=True)
+        col_left, col_right = st.columns([1.3, 1])  # chia layout: trái - phải
 
-        col1, col2 = st.columns(2)
-        with col1:
-            run_ocr = st.button("🧠 " + ("Tesseract OCR" if lang == "English" else "Nhận diện (Tesseract)"))
-        with col2:
-            run_ai = st.button("🤖 " + ("Gemini AI Analysis" if lang == "English" else "Phân tích thông minh (Gemini AI)"))
+        # --- CỘT PHẢI: ẢNH XEM TRƯỚC ---
+        with col_right:
+            st.image(img_bytes, caption="🖼️ " + ("Uploaded Image" if lang == "English" else "Ảnh đã tải lên"), width=500)
 
-        # --- TESSERACT ---
-        if run_ocr:
-            with st.spinner("⏳ " + ("Reading text..." if lang == "English" else "Đang nhận diện...")):
-                temp_path = "temp_image.png"
-                with open(temp_path, "wb") as f:
-                    f.write(img_bytes)
-                result = image_to_text(temp_path)
-                if result["success"]:
-                    show_result_box(result["text"], filename="ocr_image.txt")
-                else:
-                    st.error(result["message"])
+        # --- CỘT TRÁI: KẾT QUẢ VÀ XỬ LÝ ---
+        with col_left:
+            st.subheader("📄 " + ("Text Extraction" if lang == "English" else "Nhận diện văn bản"))
+            col1, col2 = st.columns(2)
+            with col1:
+                run_ocr = st.button("🧠 " + ("Tesseract OCR" if lang == "English" else "Nhận diện (Tesseract)"))
+            with col2:
+                run_ai = st.button("🤖 " + ("Gemini AI Analysis" if lang == "English" else "Phân tích bằng Gemini AI"))
 
-        # --- GEMINI AI ---
-        if run_ai:
-            st.session_state.ai_result_text = None
-            language_input = "Vietnamese" if "Việt" in lang else "English"
-            with st.spinner("🔮 " + ("Analyzing..." if lang == "English" else "Đang phân tích...")):
-                ai_result = analyze_document_ai(img_bytes, file_type="image", language=language_input)
-                if ai_result["success"]:
-                    st.session_state.ai_result_text = ai_result["text"]
-                else:
-                    st.error(ai_result["message"])
+            # --- TESSERACT ---
+            if run_ocr:
+                with st.spinner("🔍 " + ("Extracting text..." if lang == "English" else "Đang nhận diện...")):
+                    temp_path = "temp_image.png"
+                    with open(temp_path, "wb") as f:
+                        f.write(img_bytes)
+                    result = image_to_text(temp_path)
+                    if result["success"]:
+                        st.text_area("📜 " + ("Result" if lang == "English" else "Kết quả"),
+                                     result["text"], height=350)
+                        st.download_button("💾 TXT", result["text"], file_name="ocr_image.txt")
+                    else:
+                        st.error(result["message"])
 
-    # --- HIỂN THỊ KẾT QUẢ GEMINI ---
-    if "ai_result_text" in st.session_state and st.session_state.ai_result_text:
-        st.success("✅ " + ("Analysis Complete!" if lang == "English" else "Phân tích thành công!"))
+            # --- GEMINI AI ---
+            elif run_ai:
+                with st.spinner("🔮 " + ("Analyzing with Gemini AI..." if lang == "English" else "Đang phân tích bằng Gemini AI...")):
+                    ai_result = analyze_document_ai(img_bytes, file_type="image")
+                    if ai_result["success"]:
+                        st.session_state["ai_text"] = ai_result["text"]
+                        st.session_state["manual_fields"] = {}  # reset selections
+                        st.success("✅ " + ("AI Analysis Complete!" if lang == "English" else "Phân tích thành công!"))
+                    else:
+                        st.error(ai_result["message"])
 
-        # 🌟 Thêm tùy chọn trích xuất văn bản
-        extract_mode = st.radio(
-            "🧠 " + ("Select text extraction mode:" if lang == "English" else "Chọn mức độ trích xuất văn bản:"),
-            ["📄 Full Text", "🏷️ Key Fields Only", "✅ Choose Manually"]
-            if lang == "English"
-            else ["📄 Lấy hết văn bản", "🏷️ Chỉ lấy trường đã phân loại", "✅ Chọn thủ công các trường"],
-            index=0
-        )
+        # --- KHI ĐÃ CÓ KẾT QUẢ AI ---
+        if "ai_text" in st.session_state:
+            ai_text = st.session_state["ai_text"]
+            st.markdown("---")
 
-        lines = [line.strip() for line in st.session_state.ai_result_text.split("\n") if line.strip()]
+            st.subheader("📑 " + ("Text Post-Processing" if lang == "English" else "Xử lý sau khi nhận diện"))
 
-        if extract_mode.startswith("📄") or extract_mode.startswith("Full"):
-            filtered_text = "\n".join(lines)
+            # 2 chế độ trích xuất
+            extract_mode = st.radio(
+                "🧠 " + ("Select text extraction mode:" if lang == "English" else "Chọn cách trích xuất văn bản:"),
+                ["📄 Full Text", "✅ Manual Field Selection"]
+                if lang == "English"
+                else ["📄 Lấy toàn bộ văn bản", "✅ Chọn thủ công các trường"],
+                index=0
+            )
 
-        elif extract_mode.startswith("🏷️") or extract_mode.startswith("Key"):
-            filtered_text = "\n".join(line for line in lines if ":" in line)
+            lines = [line.strip() for line in ai_text.split("\n") if line.strip()]
+            filtered_text = ""
 
-        else:  # ✅ chọn thủ công
-            key_value_lines = [line for line in lines if ":" in line]
-            selected_fields = []
-            st.write("🔍 " + ("Select fields to include:" if lang == "English" else "Chọn các trường muốn lấy:"))
-            for line in key_value_lines:
-                k, v = line.split(":", 1)
-                if st.checkbox(f"{k.strip()}: {v.strip()}", value=True):
-                    selected_fields.append(f"{k.strip()}: {v.strip()}")
-            filtered_text = "\n".join(selected_fields) if selected_fields else "(Không có trường nào được chọn)"
+            # --- LẤY TOÀN BỘ ---
+            if extract_mode.startswith("📄") or extract_mode.startswith("Full"):
+                filtered_text = "\n".join(lines)
 
-        # --- Hiển thị kết quả sau lọc ---
-        st.text_area("📜 " + ("Filtered result:" if lang == "English" else "Kết quả sau lọc:"),
-                     filtered_text, height=400)
+            # --- CHỌN THỦ CÔNG ---
+            else:
+                key_value_lines = [line for line in lines if ":" in line]
 
-        # --- Tải xuống ---
-        format_choice = st.radio("📥 " + ("Download as:" if lang == "English" else "Tải xuống định dạng:"),
-                                 ["TXT", "DOCX", "Excel"])
+                # Nếu chưa có session state -> tạo mặc định
+                if "manual_fields" not in st.session_state or not st.session_state["manual_fields"]:
+                    st.session_state["manual_fields"] = {line: True for line in key_value_lines}
 
-        if format_choice == "TXT":
-            st.download_button("💾 TXT", filtered_text, file_name="ai_result_filtered.txt")
+                st.write("🔍 " + ("Select fields to include:" if lang == "English" else "Chọn các trường muốn giữ lại:"))
 
-        elif format_choice == "DOCX":
-            doc = Document()
-            doc.add_paragraph(filtered_text)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_doc:
-                doc.save(tmp_doc.name)
-                tmp_doc.seek(0)
-                st.download_button(
-                    "💾 DOCX",
-                    tmp_doc.read(),
-                    file_name="ai_result_filtered.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
-        elif format_choice == "Excel":
-            rows = []
-            for line in filtered_text.split("\n"):
-                if ":" in line:
+                for line in key_value_lines:
                     k, v = line.split(":", 1)
-                    rows.append({"Trường": k.strip(), "Giá trị": v.strip()})
-            if rows:
-                df = pd.DataFrame(rows)
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_xlsx:
-                    df.to_excel(tmp_xlsx.name, index=False)
-                    tmp_xlsx.seek(0)
+                    key_name = f"chk_{line}"
+                    if key_name not in st.session_state:
+                        st.session_state[key_name] = st.session_state["manual_fields"].get(line, True)
+
+                    # hiển thị checkbox (vẫn giữ trạng thái)
+                    checked = st.checkbox(f"{k.strip()}: {v.strip()}", value=st.session_state[key_name], key=key_name)
+                    st.session_state["manual_fields"][line] = checked
+
+                selected_fields = [line for line, checked in st.session_state["manual_fields"].items() if checked]
+                filtered_text = "\n".join(selected_fields) if selected_fields else "(Không có trường nào được chọn)"
+
+            # --- HIỂN THỊ KẾT QUẢ ---
+            st.text_area("📜 " + ("Processed Result" if lang == "English" else "Kết quả sau xử lý"),
+                         filtered_text, height=350)
+
+            # --- TẢI XUỐNG ---
+            format_choice = st.radio("📥 " + ("Download format:" if lang == "English" else "Chọn định dạng tải xuống:"),
+                                     ["TXT", "DOCX", "Excel"], horizontal=True)
+
+            if format_choice == "TXT":
+                st.download_button("💾 TXT", filtered_text, file_name="ai_result.txt")
+
+            elif format_choice == "DOCX":
+                doc = Document()
+                doc.add_paragraph(filtered_text)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_doc:
+                    doc.save(tmp_doc.name)
+                    tmp_doc.seek(0)
                     st.download_button(
-                        "💾 Excel",
-                        tmp_xlsx.read(),
-                        file_name="ai_result_filtered.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "💾 DOCX",
+                        tmp_doc.read(),
+                        file_name="ai_result.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
 
-# ============================================================
-# 📄 PDF MODE
-# ============================================================
+            elif format_choice == "Excel":
+                lines_excel = [l for l in filtered_text.split("\n") if ":" in l]
+                rows = [{"Field": k.strip(), "Value": v.strip()} for k, v in (line.split(":", 1) for line in lines_excel)]
+                if rows:
+                    df = pd.DataFrame(rows)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_xlsx:
+                        df.to_excel(tmp_xlsx.name, index=False)
+                        tmp_xlsx.seek(0)
+                        st.download_button(
+                            "💾 Excel",
+                            tmp_xlsx.read(),
+                            file_name="ai_result.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+
+# ====== PDF MODE ======
 elif mode in ["📄 PDF"]:
-    uploaded_pdf = st.file_uploader("📁 " + ("Upload PDF file" if lang == "English" else "Tải lên file PDF"),
-                                    type=["pdf"])
+    uploaded_pdf = st.file_uploader("📁 " + ("Upload PDF file" if lang == "English" else "Tải lên file PDF"), type=["pdf"])
     if uploaded_pdf:
         pdf_bytes = uploaded_pdf.read()
-        with open("temp_pdf.pdf", "wb") as f:
-            f.write(pdf_bytes)
+        col_left, col_right = st.columns([1.2, 1])
 
-        col1, col2 = st.columns(2)
-        with col1:
-            run_ocr = st.button("🧠 " + ("OCR PDF" if lang == "English" else "Nhận diện PDF"))
-        with col2:
-            run_ai = st.button("🤖 " + ("Gemini Analysis" if lang == "English" else "Phân tích Gemini"))
+        with col_right:
+            st.info("📄 " + ("PDF uploaded successfully." if lang == "English" else "Đã tải lên file PDF."))
 
-        if run_ocr:
-            with st.spinner("📄 " + ("Processing PDF..." if lang == "English" else "Đang xử lý PDF...")):
-                result = pdf_to_text("temp_pdf.pdf")
-                if result["success"]:
-                    show_result_box(result["text"], filename="pdf_result.txt")
-                else:
-                    st.error(result["message"])
+        with col_left:
+            st.subheader("📄 " + ("Process PDF" if lang == "English" else "Xử lý PDF"))
+            col1, col2 = st.columns(2)
+            with col1:
+                run_ocr = st.button("🧠 OCR PDF")
+            with col2:
+                run_ai = st.button("🤖 Gemini AI")
 
-        if run_ai:
-            language_input = "Vietnamese" if "Việt" in lang else "English"
-            with st.spinner("🔮 " + ("Analyzing PDF..." if lang == "English" else "Phân tích PDF...")):
-                ai_result = analyze_document_ai(pdf_bytes, file_type="pdf", language=language_input)
-                if ai_result["success"]:
-                    show_result_box(ai_result["text"], filename="ai_pdf.txt")
-                else:
-                    st.error(ai_result["message"])
+            if run_ocr:
+                with st.spinner("📄 Processing PDF..."):
+                    result = pdf_to_text("temp_pdf.pdf")
+                    if result["success"]:
+                        st.text_area("📜 Result", result["text"], height=350)
+                        st.download_button("💾 Download TXT", result["text"], file_name="pdf_result.txt")
+                    else:
+                        st.error(result["message"])
 
-# ============================================================
-# 📷 SCAN MODE
-# ============================================================
+            elif run_ai:
+                with st.spinner("🔮 Analyzing PDF..."):
+                    ai_result = analyze_document_ai(pdf_bytes, file_type="pdf")
+                    if ai_result["success"]:
+                        st.text_area("📜 AI Result", ai_result["text"], height=350)
+                        st.download_button("💾 TXT", ai_result["text"], file_name="ai_pdf_result.txt")
+                    else:
+                        st.error(ai_result["message"])
+
+# ====== SCAN MODE ======
 elif mode in ["📷 Scan"]:
-    st.caption("💡 " + ("Tip: Place paper flat, bright lighting." if lang == "English"
-                         else "Mẹo: Đặt giấy phẳng, đủ sáng khi chụp."))
-    cam = st.camera_input("📸 " + ("Take a picture" if lang == "English" else "Chụp ảnh"))
+    st.caption("💡 " + ("Tip: Ensure good lighting and flat paper." if lang == "English" else "Mẹo: Đặt giấy phẳng, đủ sáng."))
+    cam = st.camera_input("📸 " + ("Take a photo" if lang == "English" else "Chụp ảnh"))
     if cam:
         img_bytes = cam.getvalue()
-        with st.spinner("🔍 " + ("Scanning..." if lang == "English" else "Đang quét...")):
+        col_left, col_right = st.columns([1.2, 1])
+
+        with col_right:
+            st.image(img_bytes, caption="📷 " + ("Captured Image" if lang == "English" else "Ảnh đã chụp"), width=500)
+
+        with col_left:
+            st.subheader("📄 " + ("Scan Result" if lang == "English" else "Kết quả quét"))
             result = scan_to_text(img_bytes, lang=lang)
             if result["success"]:
-                show_result_box(result["text"], filename="scan_result.txt")
+                st.text_area("📜 Result", result["text"], height=350)
+                st.download_button("💾 TXT", result["text"], file_name="scan_result.txt")
             else:
                 st.error(result["message"])
 
-# ============================================================
-# 🎤 SPEECH MODE
-# ============================================================
+# ====== SPEECH MODE ======
 elif mode in ["🎤 Speech", "🎤 Giọng nói"]:
-    choice = st.radio("🎧 " + ("Select method:" if lang == "English" else "Chọn phương thức:"),
-                      ["🎙️ " + ("Record directly" if lang == "English" else "Ghi âm trực tiếp"),
+    choice = st.radio("🎧 " + ("Choose method:" if lang == "English" else "Chọn phương thức:"),
+                      ["🎙️ " + ("Record" if lang == "English" else "Ghi âm"),
                        "📁 " + ("Upload file" if lang == "English" else "Tải file âm thanh")])
+    col_left, col_right = st.columns([1.2, 1])
 
-    if "Record" in choice or "Ghi" in choice:
-        audio = audiorecorder.audiorecorder(
-            "🎙️ " + ("Start Recording" if lang == "English" else "Bắt đầu ghi âm"),
-            "🛑 " + ("Stop" if lang == "English" else "Dừng")
-        )
-        if len(audio) > 0:
-            buf = BytesIO()
-            audio.export(buf, format="wav")
-            wav_bytes = buf.getvalue()
-            st.audio(wav_bytes, format="audio/wav")
+    with col_left:
+        if "Record" in choice or "Ghi" in choice:
+            audio = audiorecorder.audiorecorder(
+                "🎙️ " + ("Start Recording" if lang == "English" else "Bắt đầu ghi âm"),
+                "🛑 " + ("Stop" if lang == "English" else "Dừng")
+            )
+            if len(audio) > 0:
+                buf = BytesIO()
+                audio.export(buf, format="wav")
+                wav_bytes = buf.getvalue()
+                st.audio(wav_bytes, format="audio/wav")
+                if st.button("🧠 " + ("Transcribe" if lang == "English" else "Nhận diện")):
+                    result = speech_to_text(audio_bytes=wav_bytes, lang=lang)
+                    if result["success"]:
+                        st.text_area("📜 Result", result["text"], height=350)
+                        st.download_button("💾 TXT", result["text"], file_name="speech_result.txt")
+                    else:
+                        st.error(result["message"])
+        else:
+            up = st.file_uploader("📁 " + ("Upload audio" if lang == "English" else "Chọn file âm thanh"),
+                                  type=["wav", "mp3", "m4a", "aac", "ogg", "flac"])
+            if up:
+                st.audio(up)
+                if st.button("🧠 " + ("Recognize" if lang == "English" else "Nhận diện file")):
+                    result = speech_to_text(uploaded_file=up, lang=lang)
+                    if result["success"]:
+                        st.text_area("📜 Result", result["text"], height=350)
+                        st.download_button("💾 TXT", result["text"], file_name="audio_result.txt")
+                    else:
+                        st.error(result["message"])
 
-            if st.button("🧠 " + ("Transcribe Speech" if lang == "English" else "Nhận diện giọng nói")):
-                result = speech_to_text(audio_bytes=wav_bytes, lang=lang)
-                if result["success"]:
-                    show_result_box(result["text"], filename="speech_result.txt")
-                else:
-                    st.error(result["message"])
-
-    else:
-        up = st.file_uploader("📁 " + ("Upload audio" if lang == "English" else "Chọn file âm thanh"),
-                              type=["wav", "mp3", "m4a", "aac", "ogg", "flac"])
-        if up:
-            st.audio(up)
-            if st.button("🧠 " + ("Recognize Audio" if lang == "English" else "Nhận diện âm thanh")):
-                result = speech_to_text(uploaded_file=up, lang=lang)
-                if result["success"]:
-                    show_result_box(result["text"], filename="uploaded_audio_result.txt")
-                else:
-                    st.error(result["message"])
+    with col_right:
+        st.info("🎤 " + ("Upload or record audio to convert speech to text." if lang == "English" else "Ghi âm hoặc tải file giọng nói để nhận diện."))
