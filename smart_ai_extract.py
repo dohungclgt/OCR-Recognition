@@ -14,7 +14,7 @@ import os
 
 # ⚙️ Load API key từ .env hoặc biến môi trường
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyASIDdnathRVBROZpbKMmreESjj_HzPR0E"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", "Your API Key Here"))
 
 # 🧠 Hàm chính
 def analyze_document_ai(file_data: bytes, file_type: str = "image"):

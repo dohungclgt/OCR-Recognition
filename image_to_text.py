@@ -6,7 +6,7 @@ from io import BytesIO
 import os
 
 # ⚙️ Đặt API key Google AI Studio tại đây (đừng public)
-os.environ["GEMINI_API_KEY"] = "AIzaSyASIDdnathRVBROZpbKMmreESjj_HzPR0E"
+os.environ["GEMINI_API_KEY"] = "Your API Key Here"
 
 # Kích hoạt cấu hình tesseract_cmd từ config.py (Windows)
 try:

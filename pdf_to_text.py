@@ -6,7 +6,7 @@ import os
 import math
 
 # ⚙️ Đặt API key của bạn ở đây (đừng commit public)
-os.environ["GEMINI_API_KEY"] = "AIzaSyASIDdnathRVBROZpbKMmreESjj_HzPR0E"
+os.environ["GEMINI_API_KEY"] = "Your API Key Here"
 
 # Kích hoạt cấu hình Tesseract từ config.py
 try:
