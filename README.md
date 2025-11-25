@@ -49,7 +49,7 @@
 
 ## 🧰 **Cách cài đặt và chạy**
 ### 1️⃣ Clone project từ GitHub
-- git clone https://github.com/dohungclgt/OCR-recognizition
+- git clone (https://github.com/dohungclgt/OCR-Recognition)
 - cd ocr_app
 ### 2️⃣ Tạo môi trường ảo
 ```bash
@@ -108,8 +108,8 @@ pdfinfo -v
 ```python
 os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "Your key here")
 ```
-- dán key API bạn lấy vào "your key here"
-- lưu lại
+- Dán key API bạn lấy vào "your key here"
+- Lưu lại
 ### ▶️ Chạy ứng dụng
 - mở Terminal và gõ lệnh:
 ```cmd
