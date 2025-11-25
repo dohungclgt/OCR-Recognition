@@ -89,7 +89,7 @@ pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
 ```cmd
 ffmpeg -version
 ```  
-- Cài đặt Poppler và thêm vào biến môi trường PATH
+### 8️⃣ Cài đặt Poppler và thêm vào biến môi trường PATH
 - https://poppler.freedesktop.org/
 - Thêm đường dẫn vào PATH:
 - Mở System Properties → Environment Variables
@@ -100,6 +100,7 @@ ffmpeg -version
 ```cmd
 pdfinfo -v
 ```
+### 9️⃣ Setup API
 - Bạn cần API để có thể hoạt động chính xác
 - truy cập vào: https://aistudio.google.com/api-keys để lấy key
 - Sau khi lấy, vào các thư mục như là Image_to_text, pdf_to_text...
